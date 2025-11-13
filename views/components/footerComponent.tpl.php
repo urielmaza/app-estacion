@@ -1,0 +1,5 @@
+
+    <footer>
+		<p>{{ APP_DESCRIPTION }}</p>
+        <p>&copy; 2025 {{ APP_NAME }} by {{ APP_AUTHOR }} | Todos los derechos reservados</p>
+    </footer>

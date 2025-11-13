@@ -106,6 +106,8 @@
         const slug = new URLSearchParams(location.search).get('slug') || '';
         const slugChip = slug.includes('/') ? slug.split('/')[1] : '';
         const chipid = chipidTpl && chipidTpl !== '{{ CHIPID }}' ? chipidTpl : slugChip;
+        const REFRESH_MS = 60000; // 60s
+        let charts = {}; // referencias Chart.js
 
         // Cargar Chart.js si no existe
         if(!window.Chart) {
@@ -128,50 +130,40 @@
             console.error('Error cargando detalle', e);
         }
 
-        // Cargar última lectura desde la API pública del panel externo
-        try {
-            const urlDatos = `https://mattprofe.com.ar/proyectos/app-estacion/datos.php?chipid=${encodeURIComponent(chipid)}&cant=1`;
-            const r = await fetch(urlDatos, { headers: { 'Accept': 'application/json' } });
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            const json = await r.json();
-            const reg = Array.isArray(json) ? (json[0] || {}) : (json || {});
-            // Helper para colocar datos por atributo data-field en cada sección
-            function fillSection(sectionId, fields){
-                const sec = document.getElementById(sectionId);
-                if(!sec) return;
-                // Fecha y ubicación siempre
-                sec.querySelectorAll('[data-field="fecha"]').forEach(el => el.textContent = reg.fecha || '—');
-                sec.querySelectorAll('[data-field="ubicacion"]').forEach(el => el.textContent = reg.ubicacion || '—');
-                fields.forEach(f => {
-                    sec.querySelectorAll(`[data-field="${f}"]`).forEach(el => {
-                        let val = reg[f];
-                        if(val === undefined || val === null || val === '') val = '—';
-                        el.textContent = val;
+        async function loadUltima(){
+            try {
+                const urlDatos = `https://mattprofe.com.ar/proyectos/app-estacion/datos.php?chipid=${encodeURIComponent(chipid)}&cant=1`;
+                const r = await fetch(urlDatos, { headers: { 'Accept': 'application/json' } });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const json = await r.json();
+                const reg = Array.isArray(json) ? (json[0] || {}) : (json || {});
+                function fillSection(sectionId, fields){
+                    const sec = document.getElementById(sectionId);
+                    if(!sec) return;
+                    sec.querySelectorAll('[data-field="fecha"]').forEach(el => el.textContent = reg.fecha || '—');
+                    sec.querySelectorAll('[data-field="ubicacion"]').forEach(el => el.textContent = reg.ubicacion || '—');
+                    fields.forEach(f => {
+                        sec.querySelectorAll(`[data-field="${f}"]`).forEach(el => {
+                            let val = reg[f];
+                            if(val === undefined || val === null || val === '') val = '—';
+                            el.textContent = val;
+                        });
                     });
-                });
+                }
+                fillSection('sec-temperatura',[ 'temperatura','sensacion','tempmax','tempmin','sensamax','sensamin' ]);
+                fillSection('sec-fuego',[ 'ffmc','dmc','dc','isi','bui','fwi' ]);
+                fillSection('sec-humedad',[ 'humedad' ]);
+                fillSection('sec-presion',[ 'presion' ]);
+                fillSection('sec-viento',[ 'veleta','viento','maxviento' ]);
+                const apodoEl = document.getElementById('det-apodo');
+                const ubicEl = document.getElementById('det-ubicacion');
+                if (apodoEl && (!apodoEl.textContent || apodoEl.textContent.trim() === '—') && reg.estacion) apodoEl.textContent = String(reg.estacion);
+                if (ubicEl && (!ubicEl.textContent || ubicEl.textContent.trim() === '—') && reg.ubicacion) ubicEl.textContent = String(reg.ubicacion);
+            } catch(e){
+                console.error('Error cargando última lectura', e);
             }
-            fillSection('sec-temperatura',[ 'temperatura','sensacion','tempmax','tempmin','sensamax','sensamin' ]);
-            fillSection('sec-fuego',[ 'ffmc','dmc','dc','isi','bui','fwi' ]);
-            fillSection('sec-humedad',[ 'humedad' ]);
-            fillSection('sec-presion',[ 'presion' ]);
-            fillSection('sec-viento',[ 'veleta','viento','maxviento' ]);
-
-            // Si no se pudo cargar apodo/ubicación desde la lista, usarlos desde este JSON
-            const apodoEl = document.getElementById('det-apodo');
-            const ubicEl = document.getElementById('det-ubicacion');
-            if (apodoEl && (!apodoEl.textContent || apodoEl.textContent.trim() === '—')) {
-                if (reg.estacion) apodoEl.textContent = String(reg.estacion);
-            }
-            if (ubicEl && (!ubicEl.textContent || ubicEl.textContent.trim() === '—')) {
-                if (reg.ubicacion) ubicEl.textContent = String(reg.ubicacion);
-            }
-        } catch (e) {
-            console.error('Error cargando última lectura', e);
-            ['sec-temperatura','sec-fuego','sec-humedad','sec-presion','sec-viento'].forEach(id => {
-                const sec = document.getElementById(id);
-                if(sec) sec.querySelector('.cat-body').innerHTML = '<p>Error al cargar datos.</p>';
-            });
         }
+        await loadUltima();
 
         // ================== Gráficos históricos ==================
         async function loadHistorico(cant=60){
@@ -184,83 +176,93 @@
             } catch(e){ console.error('Error histórico', e); return []; }
         }
 
-        const historico = await loadHistorico(60);
-        if(!historico.length){
-            ['chartTemp','chartFuego','chartHumedad','chartPresion','chartViento'].forEach(id => {
-                const canvas = document.getElementById(id);
-                if(canvas){
-                    const parent = canvas.parentElement;
-                    if(parent) parent.innerHTML = '<p style="color:#a00;font-size:.9rem;">Sin datos para graficar.</p>';
+        async function initOrUpdateCharts(){
+            const historico = await loadHistorico(60);
+            if(!historico.length){
+                ['chartTemp','chartFuego','chartHumedad','chartPresion','chartViento'].forEach(id => {
+                    if(!charts[id]){ // solo si aún no existe chart
+                        const canvas = document.getElementById(id);
+                        if(canvas){
+                            const parent = canvas.parentElement;
+                            if(parent) parent.innerHTML = '<p style="color:#a00;font-size:.9rem;">Sin datos para graficar.</p>';
+                        }
+                    }
+                });
+                return;
+            }
+            historico.sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||''));
+            const labels = historico.map(r => (r.fecha||'').split(' ').pop());
+            const num = v => { const n = parseFloat(v); return isNaN(n)? null : n; };
+            const series = {
+                temp: historico.map(r => num(r.temperatura)),
+                sens: historico.map(r => num(r.sensacion)),
+                hum: historico.map(r => num(r.humedad)),
+                pres: historico.map(r => num(r.presion)),
+                viento: historico.map(r => num(r.viento)),
+                vientoMax: historico.map(r => num(r.maxviento)),
+                ffmc: historico.map(r => num(r.ffmc)),
+                dmc: historico.map(r => num(r.dmc)),
+                dc: historico.map(r => num(r.dc)),
+                isi: historico.map(r => num(r.isi)),
+                bui: historico.map(r => num(r.bui)),
+                fwi: historico.map(r => num(r.fwi)),
+            };
+
+            const commonOpts = {
+                responsive:true,
+                maintainAspectRatio:false,
+                interaction:{mode:'index', intersect:false},
+                plugins:{ legend:{position:'bottom'}, tooltip:{ callbacks:{ label: ctx => `${ctx.dataset.label}: ${ctx.formattedValue}` } } },
+                scales:{ x:{ ticks:{ maxRotation:0 } }, y:{ beginAtZero:false } }
+            };
+
+            function ensureChart(id, datasets, extraOpts={}){
+                const el = document.getElementById(id);
+                if(!el) return;
+                if(charts[id]){
+                    charts[id].data.labels = labels;
+                    datasets.forEach((ds,i)=>{
+                        if(!charts[id].data.datasets[i]) return;
+                        charts[id].data.datasets[i].data = ds.data;
+                    });
+                    charts[id].update();
+                } else {
+                    charts[id] = new Chart(el.getContext('2d'), {
+                        type:'line',
+                        data:{ labels, datasets },
+                        options:Object.assign({}, commonOpts, extraOpts)
+                    });
                 }
-            });
-            return; // No continuar con graficado
+            }
+
+            ensureChart('chartTemp', [
+                { label:'Temp', data: series.temp, borderColor:'#d62828', backgroundColor:'rgba(214,40,40,0.15)', tension:.25, spanGaps:true },
+                { label:'Sensación', data: series.sens, borderColor:'#457b9d', backgroundColor:'rgba(69,123,157,0.15)', tension:.25, spanGaps:true }
+            ]);
+            ensureChart('chartFuego', [
+                { label:'FFMC', data: series.ffmc, borderColor:'#ff7b00', backgroundColor:'rgba(255,123,0,0.15)', tension:.2 },
+                { label:'DMC', data: series.dmc, borderColor:'#ff0059', backgroundColor:'rgba(255,0,89,0.15)', tension:.2 },
+                { label:'DC',  data: series.dc,  borderColor:'#7b2cbf', backgroundColor:'rgba(123,44,191,0.15)', tension:.2 },
+                { label:'ISI', data: series.isi, borderColor:'#008dff', backgroundColor:'rgba(0,141,255,0.15)', tension:.2 },
+                { label:'BUI', data: series.bui, borderColor:'#2d6a4f', backgroundColor:'rgba(45,106,79,0.15)', tension:.2 },
+                { label:'FWI', data: series.fwi, borderColor:'#ffbe0b', backgroundColor:'rgba(255,190,11,0.15)', tension:.2 }
+            ], { scales:{ y:{ beginAtZero:true }}});
+            ensureChart('chartHumedad', [
+                { label:'Humedad %', data: series.hum, borderColor:'#1d3557', backgroundColor:'rgba(29,53,87,0.15)', tension:.25, spanGaps:true }
+            ], { scales:{ y:{ beginAtZero:true, max:100 }}});
+            ensureChart('chartPresion', [
+                { label:'Presión hPa', data: series.pres, borderColor:'#6a4c93', backgroundColor:'rgba(106,76,147,0.15)', tension:.25, spanGaps:true }
+            ]);
+            ensureChart('chartViento', [
+                { label:'Viento Km/h', data: series.viento, borderColor:'#0a9396', backgroundColor:'rgba(10,147,150,0.15)', tension:.25 },
+                { label:'Viento Máx Km/h', data: series.vientoMax, borderColor:'#005f73', backgroundColor:'rgba(0,95,115,0.15)', tension:.25 }
+            ], { scales:{ y:{ beginAtZero:true }}});
         }
-        historico.sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||''));
-        const labels = historico.map(r => (r.fecha||'').split(' ').pop());
-
-        const num = v => { const n = parseFloat(v); return isNaN(n)? null : n; };
-
-        // Construcción datasets
-        const dsTemp = historico.map(r => num(r.temperatura));
-        const dsSens = historico.map(r => num(r.sensacion));
-        const dsHum  = historico.map(r => num(r.humedad));
-        const dsPres = historico.map(r => num(r.presion));
-        const dsViento = historico.map(r => num(r.viento));
-        const dsVientoMax = historico.map(r => num(r.maxviento));
-        const dsFFMC = historico.map(r => num(r.ffmc));
-        const dsDMC = historico.map(r => num(r.dmc));
-        const dsDC = historico.map(r => num(r.dc));
-        const dsISI = historico.map(r => num(r.isi));
-        const dsBUI = historico.map(r => num(r.bui));
-        const dsFWI = historico.map(r => num(r.fwi));
-
-        const commonOpts = {
-            responsive:true,
-            maintainAspectRatio:false,
-            interaction:{mode:'index', intersect:false},
-            plugins:{
-                legend:{position:'bottom'},
-                tooltip:{ callbacks:{ label: ctx => `${ctx.dataset.label}: ${ctx.formattedValue}` } }
-            },
-            scales:{ x:{ ticks:{ maxRotation:0 } }, y:{ beginAtZero:false } }
-        };
-
-        function createChart(id, datasets, extraOpts={}){
-            const el = document.getElementById(id);
-            if(!el) return;
-            new Chart(el.getContext('2d'), {
-                type:'line',
-                data:{ labels, datasets },
-                options: Object.assign({}, commonOpts, extraOpts)
-            });
-        }
-
-        createChart('chartTemp', [
-            { label:'Temp', data: dsTemp, borderColor:'#d62828', backgroundColor:'rgba(214,40,40,0.15)', tension:.25, spanGaps:true },
-            { label:'Sensación', data: dsSens, borderColor:'#457b9d', backgroundColor:'rgba(69,123,157,0.15)', tension:.25, spanGaps:true }
-        ]);
-
-        createChart('chartFuego', [
-            { label:'FFMC', data: dsFFMC, borderColor:'#ff7b00', backgroundColor:'rgba(255,123,0,0.15)', tension:.2 },
-            { label:'DMC', data: dsDMC, borderColor:'#ff0059', backgroundColor:'rgba(255,0,89,0.15)', tension:.2 },
-            { label:'DC',  data: dsDC,  borderColor:'#7b2cbf', backgroundColor:'rgba(123,44,191,0.15)', tension:.2 },
-            { label:'ISI', data: dsISI, borderColor:'#008dff', backgroundColor:'rgba(0,141,255,0.15)', tension:.2 },
-            { label:'BUI', data: dsBUI, borderColor:'#2d6a4f', backgroundColor:'rgba(45,106,79,0.15)', tension:.2 },
-            { label:'FWI', data: dsFWI, borderColor:'#ffbe0b', backgroundColor:'rgba(255,190,11,0.15)', tension:.2 }
-        ], { scales:{ y:{ beginAtZero:true }}});
-
-        createChart('chartHumedad', [
-            { label:'Humedad %', data: dsHum, borderColor:'#1d3557', backgroundColor:'rgba(29,53,87,0.15)', tension:.25, spanGaps:true }
-        ], { scales:{ y:{ beginAtZero:true, max:100 }}});
-
-        createChart('chartPresion', [
-            { label:'Presión hPa', data: dsPres, borderColor:'#6a4c93', backgroundColor:'rgba(106,76,147,0.15)', tension:.25, spanGaps:true }
-        ]);
-
-        createChart('chartViento', [
-            { label:'Viento Km/h', data: dsViento, borderColor:'#0a9396', backgroundColor:'rgba(10,147,150,0.15)', tension:.25 },
-            { label:'Viento Máx Km/h', data: dsVientoMax, borderColor:'#005f73', backgroundColor:'rgba(0,95,115,0.15)', tension:.25 }
-        ], { scales:{ y:{ beginAtZero:true }}});
+        await initOrUpdateCharts();
+        setInterval(async () => {
+            await loadUltima();
+            await initOrUpdateCharts();
+        }, REFRESH_MS);
     })();
     </script>
 

@@ -6,7 +6,7 @@
     <header>
         <h1>{{ APP_NAME }}</h1>
         <nav>
-            <a href="?slug=panel">Acceder</a>
+            <a href="?slug=login">Acceder</a>
         </nav>
     </header>
 

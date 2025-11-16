@@ -8,6 +8,7 @@
         <h1>{{ APP_NAME }}</h1>
         <nav>
             <a href="?slug=landing">Inicio</a>
+            <a href="?slug=logout">Cerrar sesión</a>
         </nav>
     </header>
 
@@ -28,8 +29,22 @@
     </main>
 
     <script>
-    // Nuevo flujo basado en el ejemplo indicado
     document.addEventListener('DOMContentLoaded', () => {
+        // Registrar abandono de la app: marca delete_date en backend
+        const sendAbandon = () => {
+            const url = '?slug=leave';
+            const payload = JSON.stringify({ ts: Date.now(), path: location.pathname + location.search });
+            if (navigator.sendBeacon) {
+                const blob = new Blob([payload], { type: 'application/json' });
+                navigator.sendBeacon(url, blob);
+            } else {
+                fetch(url, { method: 'POST', body: payload, headers: { 'Content-Type': 'application/json' }, keepalive: true }).catch(()=>{});
+            }
+        };
+        // beforeunload es soportado en desktop; pagehide mejora en móviles/Safari
+        window.addEventListener('beforeunload', sendAbandon);
+        window.addEventListener('pagehide', sendAbandon);
+
         loadEstaciones().then(data => {
             if(!Array.isArray(data) || !data.length){
                 document.querySelector('#list-estacion').innerHTML = '<p>No se encontraron estaciones.</p>';
@@ -43,7 +58,6 @@
     });
 
     async function loadEstaciones(){
-        // Intento API oficial (list-stations) primero
         try {
             const resp = await fetch('https://mattprofe.com.ar/proyectos/app-estacion/datos.php?mode=list-stations', {
                 headers: { 'Accept': 'application/json' }

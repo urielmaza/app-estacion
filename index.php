@@ -12,10 +12,13 @@
 
 	include 'env.php';
 
+	// Credenciales SMTP para envío de correos
+	include 'librarys/mp-mailer/credenciales.php';
+
 	include 'librarys/palta/Palta.php';
 
 	include 'models/DBAbstract.php';
-	include 'models/Usuarios.php';
+	include 'models/ClienteAppEstacion.php';
 
 	$section = "landing";
 

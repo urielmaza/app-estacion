@@ -6,12 +6,15 @@
 	define("APP_DESCRIPTION", "Sistema de monitoreo en tiempo real de variables climáticas locales (temperatura, humedad, presión, viento y lluvia).");	
 	define("APP_AUTHOR", "MattProfe");
 
+	/* URL base pública de la app (con barra final) */
+	define("BASE_URL", "https://mattprofe.com.ar/alumno/9977/app-estacion/");
+
 	/* colores de la app*/
 	define("COLOR_FONDO_PRINCIPAL", "#f9f9f9");
 	define("COLOR_TEXTO_PRINCIPAL", "#222");
 	define("COLOR_TEXTO_SECUNDARIO", "#555");
 	define("COLOR_ACENTO_ALERTA", "#d62828"); // Urgencia / alerta
-	define("COLOR_ACENTO_SECUNDARIO", "#457b9d"); // Confianza / enlaces
+	define("COLOR_ACENTO_SECUNDARIO", "#d62828"); // Confianza / enlaces
 	define("COLOR_BOTON_PRINCIPAL_TEXTO", "#fff");
 	define("COLOR_BOTON_SECUNDARIO_TEXTO", "#fff");
 	define("COLOR_HEADER_FONDO", "#fff");
@@ -23,11 +26,8 @@
 
 
 	define("DB_HOST", "mattprofe.com.ar");
-	define("DB_USER", "personasperdidas-demo");
-	define("DB_PASS", "robotica");
-	define("DB_NAME", "personasperdidas-demo");
-
-
-	/*==== CONSTANTES para la conexión al email*/
+	define("DB_USER", "9977");
+	define("DB_PASS", "perro.abeto.jugo");
+	define("DB_NAME", "9977");
 
  ?>

@@ -20,7 +20,13 @@
 
 			$response = $this->db->query($sql);
 
-			return $response->fetch_all(MYSQLI_ASSOC);
+			return $response ? $response->fetch_all(MYSQLI_ASSOC) : [];
+		}
+
+		/* Ejecuta INSERT/UPDATE/DELETE y devuelve true/false */
+		public function ejecutar($sql){
+			$result = $this->db->query($sql);
+			return $result === true;
 		}
 	}
 

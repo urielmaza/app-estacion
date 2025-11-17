@@ -56,6 +56,23 @@
                 <div><a href="?slug=register">¿No tienes una cuenta? Registrarse</a></div>
             </div>
         </form>
+        <script>
+        // Permitir 'admin-estacion' sin el símbolo '@' cambiando dinámicamente el tipo
+        (function(){
+            const input = document.getElementById('txt_email');
+            const isPseudoEmail = v => v === 'admin-estacion';
+            input.addEventListener('input', () => {
+                if(isPseudoEmail(input.value.trim())){
+                    // Evita validación nativa de email para este usuario especial
+                    if(input.type !== 'text'){ input.type = 'text'; }
+                } else {
+                    if(input.type !== 'email'){ input.type = 'email'; }
+                }
+            });
+            // Al cargar, forzar tipo correcto si ya está prellenado
+            if(isPseudoEmail(input.value.trim())) input.type = 'text';
+        })();
+        </script>
     </div>
 </body>
 </html>

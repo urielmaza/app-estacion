@@ -20,6 +20,12 @@
 	include 'models/DBAbstract.php';
 	include 'models/ClienteAppEstacion.php';
 
+	// API: atajo por parámetro GET directo
+	if (isset($_GET['list-clients-location'])) {
+		include 'controllers/apiController.php';
+		exit;
+	}
+
 	$section = "landing";
 
 	// Soporta slugs con segmentos (p.ej. detalle/CHIPID)

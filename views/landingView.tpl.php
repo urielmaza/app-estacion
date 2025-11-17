@@ -6,7 +6,7 @@
     <header>
         <h1>{{ APP_NAME }}</h1>
         <nav>
-            <a href="?slug=login">Acceder</a>
+            <a href="{{ NAV_PRIMARY_HREF }}">{{ NAV_PRIMARY_TEXT }}</a>
         </nav>
     </header>
 
@@ -14,7 +14,7 @@
         <h2>Monitoreo Climático Local en Tiempo Real</h2>
         <p>{{ APP_DESCRIPTION }}</p>
         <div class="botones-accion">
-            <a class="btn btn-principal" href="?slug=panel">Ver Panel</a>
+            <a class="btn btn-principal" href="{{ HERO_PRIMARY_HREF }}">{{ HERO_PRIMARY_TEXT }}</a>
         </div>
     </section>
 

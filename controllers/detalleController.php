@@ -10,6 +10,12 @@ if(!isset($_SESSION['id_cliente'])){
     exit;
 }
 
+// Si es administrador, no debe acceder a detalle; redirigir a administrador
+if (isset($_SESSION['is_admin']) && $_SESSION['is_admin'] === true) {
+    header('Location: ?slug=administrator');
+    exit;
+}
+
 $tpl = new Palta("detalle");
 $tpl->assign([
     "APP_SECTION" => "Detalle",

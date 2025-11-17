@@ -8,28 +8,29 @@ if(isset($_SESSION['id_cliente'])){
 
 $error_login = "";
 $chipidRedirect = isset($_GET['chipid']) ? $_GET['chipid'] : ''; // opcional capturar chipid que panel usó
-
-function getClientContext(){
-	$ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-	$ua = $_SERVER['HTTP_USER_AGENT'] ?? 'desconocido';
-	$os = 'Desconocido';
-	if(stripos($ua,'Windows')!==false) $os='Windows'; elseif(stripos($ua,'Linux')!==false) $os='Linux'; elseif(stripos($ua,'Mac')!==false) $os='macOS';
-	$nav = 'Navegador';
-	foreach(['Chrome','Firefox','Safari','Edge','Opera'] as $n){ if(stripos($ua,$n)!==false){ $nav=$n; break; } }
-	return compact('ip','ua','os','nav');
-}
+require_once __DIR__ . '/../models/Tracker.php';
 
 if(isset($_POST['btn_ingresar'])){
 	$usuario = new ClienteAppEstacion();
 	$email = $_POST['txt_email'] ?? '';
 	$pass = $_POST['txt_password'] ?? '';
-	$ctx = getClientContext();
+	// Contexto del cliente, reutilizando la misma lógica que usa Tracker
+	$ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+	$ua = $_SERVER['HTTP_USER_AGENT'] ?? 'desconocido';
+	list($os,$nav) = Tracker::parseUA($ua);
+	$ctx = compact('ip','ua','os','nav');
 	$r = $usuario->validateLogin($email,$pass);
 	if($r['errno']===202){
 		// Login válido
 		$_SESSION['id_cliente'] = $r['user']['id_cliente'];
 		$_SESSION['token'] = $r['user']['token'];
 		$_SESSION['email'] = $r['user']['email'];
+		// Flag admin si la cuenta lo es en BD
+		if (isset($r['user']['is_admin']) && (int)$r['user']['is_admin'] === 1) {
+			$_SESSION['is_admin'] = true;
+		} else {
+			unset($_SESSION['is_admin']);
+		}
 		// Email notificación
 		$blockedLink = BASE_URL.'?slug=blocked/'.urlencode($r['user']['token']);
 		$html = '<h3>Inicio de sesión exitoso</h3>'
@@ -39,7 +40,12 @@ if(isset($_POST['btn_ingresar'])){
 			.'<p>Si no fuiste tú puedes bloquear tu cuenta:</p>'
 			.'<p><a style="display:inline-block;padding:10px 15px;background:#d62828;color:#fff;text-decoration:none;border-radius:6px" href="'.$blockedLink.'">No fui yo, bloquear cuenta</a></p>';
 		$usuario->sendEmail($r['user']['email'],'Inicio de sesión en App Estación',$html);
-		$dest = $chipidRedirect ? ('?slug=detalle/'.urlencode($chipidRedirect)) : '?slug=panel';
+		// Redirección priorizando vista administrador si es cuenta admin
+		if (isset($_SESSION['is_admin']) && $_SESSION['is_admin'] === true) {
+			$dest = '?slug=administrator';
+		} else {
+			$dest = $chipidRedirect ? ('?slug=detalle/'.urlencode($chipidRedirect)) : '?slug=panel';
+		}
 		header('Location: '.$dest); exit;
 	} elseif($r['errno']===401){
 		// Password incorrecta -> email de alerta
